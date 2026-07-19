@@ -35,13 +35,19 @@ if not exist "node_modules\" (
     echo.
 )
 
-echo  [*] Starting dev server...
-echo  [*] The browser will open automatically.
+:: Kill any process already using port 3000 to avoid conflicts
+echo  [*] Checking if port 3000 is in use...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000 " ^| findstr "LISTENING" 2^>nul') do (
+    echo  [*] Killing process on port 3000 (PID: %%a)
+    taskkill /F /PID %%a >nul 2>nul
+)
+
+echo  [*] Starting dev server on http://localhost:3000 ...
 echo  [*] Press Ctrl+C to stop the server.
 echo.
 
 :: Open the browser after a short delay (gives server time to start)
-start "" cmd /c "timeout /t 4 /nobreak >nul && start http://localhost:3000"
+start "" cmd /c "timeout /t 5 /nobreak >nul && start http://localhost:3000"
 
 :: Start the dev server (this blocks until Ctrl+C)
 call npm.cmd run dev

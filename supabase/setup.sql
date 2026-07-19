@@ -4,6 +4,13 @@
 -- ============================================================
 
 -- 1. TABLES
+DROP TABLE IF EXISTS public.assignment_completions CASCADE;
+DROP TABLE IF EXISTS public.assignments CASCADE;
+DROP TABLE IF EXISTS public.submissions CASCADE;
+DROP TABLE IF EXISTS public.questions CASCADE;
+DROP TABLE IF EXISTS public.forms CASCADE;
+DROP TABLE IF EXISTS public.users CASCADE;
+
 CREATE TABLE public.users (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
@@ -20,6 +27,10 @@ CREATE TABLE public.forms (
   type TEXT NOT NULL DEFAULT 'quiz' CHECK (type IN ('quiz','test')),
   has_timer BOOLEAN NOT NULL DEFAULT false,
   time_limit_minutes INTEGER,
+  require_pin BOOLEAN NOT NULL DEFAULT false,
+  access_pin TEXT,
+  start_mode TEXT NOT NULL DEFAULT 'immediate' CHECK (start_mode IN ('immediate', 'synchronized')),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'waiting', 'in_progress', 'completed')),
   is_published BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -43,6 +54,7 @@ CREATE TABLE public.submissions (
   score INTEGER NOT NULL DEFAULT 0,
   total_questions INTEGER NOT NULL DEFAULT 0,
   duration_seconds INTEGER NOT NULL DEFAULT 0,
+  cheat_logs JSONB NOT NULL DEFAULT '[]'::jsonb,
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (form_id, student_id)
 );
@@ -114,11 +126,13 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('assignments', 'assignments', true)
 ON CONFLICT (id) DO NOTHING;
 
+DROP POLICY IF EXISTS "Service role full access on assignments bucket" ON storage.objects;
 CREATE POLICY "Service role full access on assignments bucket"
   ON storage.objects FOR ALL
   TO service_role
   USING (bucket_id = 'assignments');
 
+DROP POLICY IF EXISTS "Public read access on assignments bucket" ON storage.objects;
 CREATE POLICY "Public read access on assignments bucket"
   ON storage.objects FOR SELECT
   TO anon, authenticated

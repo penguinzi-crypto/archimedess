@@ -32,7 +32,7 @@ export const listAdminForms = createServerFn({ method: "GET" }).handler(async ()
 });
 
 export const getFormForQuiz = createServerFn({ method: "POST" })
-  .validator((d) => z.object({ formId: z.string().uuid() }).parse(d))
+  .validator((d) => z.object({ formId: z.string().uuid(), pin: z.string().optional() }).parse(d))
   .handler(async ({ data }) => {
     const { requireStudent } = await import("./guards.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -40,10 +40,21 @@ export const getFormForQuiz = createServerFn({ method: "POST" })
 
     const { data: form } = await supabaseAdmin
       .from("forms")
-      .select("id, title, description, type, has_timer, time_limit_minutes, is_published")
+      .select("id, title, description, type, has_timer, time_limit_minutes, is_published, require_pin, access_pin, start_mode, status")
       .eq("id", data.formId)
       .maybeSingle();
     if (!form || !form.is_published) throw new Error("Quiz unavailable");
+
+    if (form.require_pin && form.access_pin !== data.pin) {
+      return { 
+        form: { 
+          id: form.id, title: form.title, description: form.description, 
+          require_pin: true, start_mode: form.start_mode, status: form.status 
+        }, 
+        requirePin: true, 
+        questions: [] 
+      };
+    }
 
     // CRITICAL: never return correct_answer to the client
     const { data: questions } = await supabaseAdmin
@@ -52,7 +63,7 @@ export const getFormForQuiz = createServerFn({ method: "POST" })
       .eq("form_id", data.formId)
       .order("order_index");
 
-    return { form, questions: questions ?? [] };
+    return { form, requirePin: false, questions: questions ?? [] };
   });
 
 export const getQuestionCount = createServerFn({ method: "POST" })
@@ -76,6 +87,9 @@ export const createForm = createServerFn({ method: "POST" })
       type: z.enum(["quiz", "test"]),
       has_timer: z.boolean(),
       time_limit_minutes: z.number().nullable(),
+      require_pin: z.boolean().default(false),
+      access_pin: z.string().nullable().default(null),
+      start_mode: z.enum(["immediate", "synchronized"]).default("immediate"),
       questions: z.array(QuestionInput).min(1),
     }).parse(d),
   )
@@ -92,6 +106,10 @@ export const createForm = createServerFn({ method: "POST" })
         type: data.type,
         has_timer: data.has_timer,
         time_limit_minutes: data.time_limit_minutes,
+        require_pin: data.require_pin,
+        access_pin: data.access_pin,
+        start_mode: data.start_mode,
+        status: data.start_mode === "synchronized" ? "draft" : "in_progress",
       })
       .select("id")
       .single();
@@ -166,3 +184,16 @@ export const getFormReview = createServerFn({ method: "POST" })
     };
   });
 
+export const startExam = createServerFn({ method: "POST" })
+  .validator((d) => z.object({ formId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import("./guards.server");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await requireAdmin();
+    const { error } = await supabaseAdmin
+      .from("forms")
+      .update({ status: "in_progress" })
+      .eq("id", data.formId);
+    if (error) throw new Error("Could not start exam");
+    return { success: true };
+  });

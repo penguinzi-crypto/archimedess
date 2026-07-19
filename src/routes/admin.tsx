@@ -1,11 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
   Plus, LogOut, Users as UsersIcon, FileText, BarChart3,
-  Eye, Trash2, ToggleLeft, ToggleRight, Image, BookOpen,
+  Eye, Trash2, ToggleLeft, ToggleRight, Image, BookOpen, Dices,
+  Play, AlertTriangle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -21,33 +23,36 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import {
-  listAdminForms, createForm, deleteForm, getFormReview,
+  listAdminForms, createForm, deleteForm, getFormReview, startExam,
 } from "@/lib/forms.functions";
 import { getDashboardStats } from "@/lib/submissions.functions";
 import {
   listStudents, createStudent, toggleStudentDisabled, deleteStudent,
 } from "@/lib/users.functions";
 import {
-  uploadMeme, removeMeme, getMemeUrl,
-} from "@/lib/meme.functions";
+  uploadFeatured, removeFeatured, getFeatured,
+} from "@/lib/featured.functions";
 import { getAssignments, createAssignment, deleteAssignment } from "@/lib/assignments.functions";
+
+const serverGuardAdmin = createServerFn({ method: "GET" }).handler(async () => {
+  const { redirectUnlessAdmin } = await import("@/lib/guards.server");
+  await redirectUnlessAdmin();
+});
 
 export const Route = createFileRoute("/admin")({
   component: AdminPanel,
-  ssr: false,
-  head: () => ({ meta: [{ title: "Admin — Quiz Portal" }] }),
+  beforeLoad: async () => {
+    await serverGuardAdmin();
+  },
+  head: () => ({ meta: [{ title: "Admin — School Portal" }] }),
 });
 
 function AdminPanel() {
-  const { user, loading, logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (loading) return;
-    if (!user) navigate({ to: "/" });
-    else if (user.role !== "admin") navigate({ to: "/student" });
-  }, [user, loading, navigate]);
-
+  // Server-side beforeLoad already enforces admin access.
+  // This is a graceful client fallback only (belt-and-suspenders).
   if (!user) return null;
 
   return (
@@ -69,14 +74,14 @@ function AdminPanel() {
             <TabsTrigger value="forms" className="gap-2"><FileText className="h-4 w-4" /> Forms</TabsTrigger>
             <TabsTrigger value="students" className="gap-2"><UsersIcon className="h-4 w-4" /> Students</TabsTrigger>
             <TabsTrigger value="assignments" className="gap-2"><BookOpen className="h-4 w-4" /> Assignments</TabsTrigger>
-            <TabsTrigger value="meme" className="gap-2"><Image className="h-4 w-4" /> Meme</TabsTrigger>
+            <TabsTrigger value="featured" className="gap-2"><Image className="h-4 w-4" /> Featured</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6"><DashboardTab /></TabsContent>
           <TabsContent value="forms" className="mt-6"><FormsTab /></TabsContent>
           <TabsContent value="students" className="mt-6"><StudentsTab /></TabsContent>
           <TabsContent value="assignments" className="mt-6"><AssignmentsTab /></TabsContent>
-          <TabsContent value="meme" className="mt-6"><MemeTab /></TabsContent>
+          <TabsContent value="featured" className="mt-6"><FeaturedTab /></TabsContent>
         </Tabs>
       </div>
     </main>
@@ -92,39 +97,72 @@ function DashboardTab() {
   });
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <StatCard label="Total Submissions" value={stats?.total ?? 0} />
-      <StatCard label="Average Score" value={`${stats?.avg ?? 0}%`} />
-      <StatCard label="Forms / Students" value={`${stats?.formCount ?? 0} / ${stats?.studentCount ?? 0}`} />
+    <div className="grid gap-6 md:grid-cols-2">
+      <div className="md:col-span-2 grid gap-4 grid-cols-1 md:grid-cols-3">
+        <StatCard label="Total Submissions" value={stats?.total ?? 0} />
+        <StatCard label="Average Score" value={`${stats?.avg ?? 0}%`} />
+        <StatCard label="Forms / Students" value={`${stats?.formCount ?? 0} / ${stats?.studentCount ?? 0}`} />
+      </div>
 
-      <div className="glass rounded-2xl p-6 md:col-span-1">
-        <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-muted-foreground">Pass vs Fail</h3>
-        <div className="h-56">
+      <div className="glass relative overflow-hidden rounded-3xl p-6 shadow-2xl border border-border/50 bg-card/30">
+        <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-emerald-500/10 blur-3xl" />
+        <h3 className="mb-6 text-sm font-bold uppercase tracking-widest text-foreground/80 flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+          Pass vs Fail
+        </h3>
+        <div className="h-64">
           <ResponsiveContainer>
-            <PieChart>
-              <Pie data={[
-                { name: "Pass", value: stats?.pass ?? 0 },
-                { name: "Fail", value: stats?.fail ?? 0 },
-              ]} dataKey="value" innerRadius={50} outerRadius={80} strokeWidth={0}>
-                <Cell fill="oklch(0.72 0.17 155)" />
-                <Cell fill="oklch(0.62 0.24 25)" />
-              </Pie>
-              <Tooltip contentStyle={{ background: "oklch(0.18 0.03 265)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12 }} />
-            </PieChart>
+            <BarChart data={[
+                { name: "Pass", value: stats?.pass ?? 0, fill: "url(#colorPass)" },
+                { name: "Fail", value: stats?.fail ?? 0, fill: "url(#colorFail)" },
+              ]}
+              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient id="colorPass" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#34d399" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#059669" stopOpacity={0.8} />
+                </linearGradient>
+                <linearGradient id="colorFail" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#fb7185" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#e11d48" stopOpacity={0.8} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.05} vertical={false} />
+              <XAxis dataKey="name" stroke="currentColor" strokeOpacity={0.4} fontSize={12} tickLine={false} axisLine={false} dy={10} />
+              <YAxis stroke="currentColor" strokeOpacity={0.4} fontSize={12} allowDecimals={false} tickLine={false} axisLine={false} dx={-10} />
+              <Tooltip cursor={false} content={<CustomTooltip />} />
+              <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={60} />
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      <div className="glass rounded-2xl p-6 md:col-span-2">
-        <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-muted-foreground">Avg Score per Form</h3>
-        <div className="h-56">
+      <div className="glass relative overflow-hidden rounded-3xl p-6 shadow-2xl border border-border/50 bg-card/30">
+        <div className="absolute -left-20 -bottom-20 h-40 w-40 rounded-full bg-blue-500/10 blur-3xl" />
+        <h3 className="mb-6 text-sm font-bold uppercase tracking-widest text-foreground/80 flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
+          Avg Score per Form
+        </h3>
+        <div className="h-64">
           <ResponsiveContainer>
-            <BarChart data={stats?.perForm ?? []}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis dataKey="name" stroke="rgba(255,255,255,0.5)" fontSize={11} />
-              <YAxis stroke="rgba(255,255,255,0.5)" fontSize={11} />
-              <Tooltip contentStyle={{ background: "oklch(0.18 0.03 265)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12 }} />
-              <Bar dataKey="avg" fill="oklch(0.72 0.18 220)" radius={[8, 8, 0, 0]} />
+            <BarChart data={stats?.perForm ?? []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="colorScore0" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#a3e635" stopOpacity={1} /><stop offset="100%" stopColor="#4d7c0f" stopOpacity={0.8} /></linearGradient>
+                <linearGradient id="colorScore1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={1} /><stop offset="100%" stopColor="#1d4ed8" stopOpacity={0.8} /></linearGradient>
+                <linearGradient id="colorScore2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fde047" stopOpacity={1} /><stop offset="100%" stopColor="#a16207" stopOpacity={0.8} /></linearGradient>
+                <linearGradient id="colorScore3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f472b6" stopOpacity={1} /><stop offset="100%" stopColor="#be185d" stopOpacity={0.8} /></linearGradient>
+                <linearGradient id="colorScore4" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#c084fc" stopOpacity={1} /><stop offset="100%" stopColor="#6d28d9" stopOpacity={0.8} /></linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.05} vertical={false} />
+              <XAxis dataKey="name" stroke="currentColor" strokeOpacity={0.4} fontSize={12} tickLine={false} axisLine={false} dy={10} />
+              <YAxis stroke="currentColor" strokeOpacity={0.4} fontSize={12} tickLine={false} axisLine={false} dx={-10} />
+              <Tooltip cursor={false} content={<CustomTooltip />} />
+              <Bar dataKey="avg" radius={[6, 6, 0, 0]} maxBarSize={60}>
+                {(stats?.perForm ?? []).map((entry: any, index: number) => {
+                  return <Cell key={`cell-${index}`} fill={`url(#colorScore${index % 5})`} />;
+                })}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -133,11 +171,42 @@ function DashboardTab() {
   );
 }
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="glass p-4 rounded-xl border border-border/50 shadow-2xl backdrop-blur-xl bg-background/80 min-w-[140px] animate-in fade-in zoom-in duration-200">
+        <p className="text-[10px] font-bold text-muted-foreground mb-3 uppercase tracking-widest">{label || payload[0]?.name}</p>
+        {payload.map((entry: any, index: number) => {
+          let color = entry.color || entry.payload.fill || entry.fill || "currentColor";
+          if (typeof color === 'string' && color.startsWith('url(#colorScore')) {
+            const colors = ["#a3e635", "#60a5fa", "#fde047", "#f472b6", "#c084fc"];
+            const idxMatch = color.match(/\d/);
+            color = idxMatch ? colors[Number(idxMatch[0])] : color;
+          } else if (color === "url(#colorPass)") color = "#34d399";
+          else if (color === "url(#colorFail)") color = "#fb7185";
+
+          return (
+            <div key={`item-${index}`} className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: color, boxShadow: `0 0 10px ${color}` }} />
+                <p className="text-sm font-medium text-foreground/80">{entry.name}</p>
+              </div>
+              <p className="text-sm font-bold text-foreground">{entry.value}</p>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return null;
+}
+
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass rounded-2xl p-6">
-      <p className="text-xs uppercase tracking-widest text-muted-foreground">{label}</p>
-      <p className="mt-2 text-3xl font-bold text-gradient">{value}</p>
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass relative overflow-hidden rounded-3xl p-6 shadow-xl border border-border/50 bg-card/30">
+      <div className="absolute -right-10 -bottom-10 h-32 w-32 rounded-full bg-foreground/5 blur-3xl" />
+      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">{label}</p>
+      <p className="mt-2 text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-foreground to-muted-foreground">{value}</p>
     </motion.div>
   );
 }
@@ -149,6 +218,7 @@ function FormsTab() {
   const [reviewFormId, setReviewFormId] = useState<string | null>(null);
   const fetchForms = useServerFn(listAdminForms);
   const removeForm = useServerFn(deleteForm);
+  const startExamFn = useServerFn(startExam);
 
   const { data: forms = [] } = useQuery({
     queryKey: ["admin-forms"],
@@ -195,6 +265,13 @@ function FormsTab() {
                   <td className="px-4 py-3 capitalize text-muted-foreground">{f.type}</td>
                   <td className="px-4 py-3 text-muted-foreground">{f.has_timer ? `${f.time_limit_minutes}m` : "—"}</td>
                   <td className="px-4 py-3 text-right">
+                    {f.start_mode === 'synchronized' && f.status !== 'in_progress' && (
+                       <Button variant="ghost" size="sm" onClick={async () => {
+                          await startExamFn({ data: { formId: f.id } });
+                          qc.invalidateQueries({ queryKey: ["admin-forms"] });
+                          toast.success("Exam Started!");
+                       }} className="gap-1 text-primary"><Play className="h-4 w-4" /> Start Exam</Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => setReviewFormId(f.id)} className="gap-1"><Eye className="h-4 w-4" /> Review</Button>
                     <Button variant="ghost" size="sm" onClick={() => handleDelete(f.id)} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
                   </td>
@@ -238,6 +315,7 @@ function SubmissionsReview({ formId, onClose }: { formId: string | null; onClose
                 <th className="py-2 text-left">Score</th>
                 <th className="py-2 text-left">%</th>
                 <th className="py-2 text-left">Time</th>
+                <th className="py-2 text-left">Anti-Cheat</th>
                 <th className="py-2"></th>
               </tr>
             </thead>
@@ -245,6 +323,7 @@ function SubmissionsReview({ formId, onClose }: { formId: string | null; onClose
               {data.students.map((s: any) => {
                 const sub = data.subs.find((x: any) => x.student_id === s.id);
                 const pct = sub ? Math.round((sub.score / Math.max(1, sub.total_questions)) * 100) : 0;
+                const cheatLogs = Array.isArray(sub?.cheat_logs) ? sub.cheat_logs : [];
                 return (
                   <tr key={s.id} className="border-t border-white/5">
                     <td className="py-2 font-medium">{s.name}</td>
@@ -252,6 +331,17 @@ function SubmissionsReview({ formId, onClose }: { formId: string | null; onClose
                     <td className="py-2">{sub ? `${sub.score}/${sub.total_questions}` : "—"}</td>
                     <td className="py-2">{sub ? `${pct}%` : "—"}</td>
                     <td className="py-2 font-mono text-xs">{sub ? formatDur(sub.duration_seconds) : "—"}</td>
+                    <td className="py-2">
+                      {cheatLogs.length > 0 ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
+                          <AlertTriangle className="h-3 w-3" /> {cheatLogs.length} Flags
+                        </span>
+                      ) : sub ? (
+                        <span className="text-xs text-muted-foreground">Clean</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
                     <td className="py-2 text-right">
                       {sub && (
                         <Button size="sm" variant="ghost" onClick={() => setViewing({ student: s, sub, questions: data.questions })} className="gap-1">
@@ -272,6 +362,16 @@ function SubmissionsReview({ formId, onClose }: { formId: string | null; onClose
               <DialogTitle>{viewing?.student?.name}'s answers</DialogTitle>
               <DialogDescription>Score: {viewing?.sub?.score}/{viewing?.sub?.total_questions}</DialogDescription>
             </DialogHeader>
+            {viewing?.sub?.cheat_logs?.length > 0 && (
+              <div className="mb-4 rounded-xl border border-destructive/20 bg-destructive/10 p-4">
+                <h3 className="mb-2 font-bold text-destructive flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Anti-Cheat Flags ({viewing.sub.cheat_logs.length})</h3>
+                <ul className="space-y-1 text-sm text-destructive/90 list-disc pl-5">
+                  {viewing.sub.cheat_logs.map((log: any, i: number) => (
+                    <li key={i}><strong>{log.time}</strong> — {log.reason}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="space-y-3">
               {viewing?.questions.map((q: any, i: number) => {
                 const a = (viewing.sub.answers_json?.[q.id] ?? "").toString();
@@ -309,6 +409,9 @@ function NewFormWizard({ open, onClose }: { open: boolean; onClose: () => void }
   const [description, setDescription] = useState("");
   const [hasTimer, setHasTimer] = useState(false);
   const [timeLimit, setTimeLimit] = useState(30);
+  const [requirePin, setRequirePin] = useState(false);
+  const [accessPin, setAccessPin] = useState("");
+  const [startMode, setStartMode] = useState<"immediate" | "synchronized">("immediate");
   const [questions, setQuestions] = useState<Array<{
     question_text: string; question_type: "multiple_choice" | "short_answer";
     options: string[]; correct_answer: string;
@@ -318,6 +421,7 @@ function NewFormWizard({ open, onClose }: { open: boolean; onClose: () => void }
   function reset() {
     setStep(1); setType("quiz"); setTitle(""); setDescription("");
     setHasTimer(false); setTimeLimit(30); setQuestions([]);
+    setRequirePin(false); setAccessPin(""); setStartMode("immediate");
   }
 
   function addQuestion() {
@@ -332,6 +436,8 @@ function NewFormWizard({ open, onClose }: { open: boolean; onClose: () => void }
         data: {
           title, description: description || null, type,
           has_timer: hasTimer, time_limit_minutes: hasTimer ? timeLimit : null,
+          require_pin: requirePin, access_pin: requirePin ? accessPin : null,
+          start_mode: startMode,
           questions,
         },
       });
@@ -378,6 +484,27 @@ function NewFormWizard({ open, onClose }: { open: boolean; onClose: () => void }
                 <Input type="number" min={1} value={timeLimit} onChange={(e) => setTimeLimit(parseInt(e.target.value) || 1)} className="bg-input/40 border-white/10" />
               </div>
             )}
+            
+            <div className="flex items-center justify-between rounded-xl border border-white/10 p-4 mt-4">
+              <div><p className="font-medium">Require Access PIN</p><p className="text-xs text-muted-foreground">Students must enter a PIN to start</p></div>
+              <Switch checked={requirePin} onCheckedChange={setRequirePin} />
+            </div>
+            {requirePin && (
+              <div><Label>Access PIN</Label>
+                <Input type="text" value={accessPin} onChange={(e) => setAccessPin(e.target.value)} placeholder="e.g. MATH101" className="bg-input/40 border-white/10 font-mono" />
+              </div>
+            )}
+
+            <div className="mt-4 space-y-2 rounded-xl border border-white/10 p-4">
+              <div><p className="font-medium">Start Mode</p><p className="text-xs text-muted-foreground">How students begin the exam</p></div>
+              <Select value={startMode} onValueChange={(v: any) => setStartMode(v)}>
+                <SelectTrigger className="bg-input/40 border-white/10 mt-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="immediate">Immediate (Start upon joining)</SelectItem>
+                  <SelectItem value="synchronized">Synchronized (Waiting Room Lobby)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
         {step === 4 && (
@@ -508,17 +635,18 @@ function StudentsTab() {
   );
 }
 
-/* ============== MEME OF THE DAY ============== */
-function MemeTab() {
+/* ============== FEATURED OF THE DAY ============== */
+function FeaturedTab() {
   const qc = useQueryClient();
   const [uploading, setUploading] = useState(false);
-  const fetchMeme = useServerFn(getMemeUrl);
-  const doUpload = useServerFn(uploadMeme);
-  const doRemove = useServerFn(removeMeme);
+  const [description, setDescription] = useState("");
+  const fetchFeatured = useServerFn(getFeatured);
+  const doUpload = useServerFn(uploadFeatured);
+  const doRemove = useServerFn(removeFeatured);
 
-  const { data: memeUrl, isLoading } = useQuery({
-    queryKey: ["admin-meme"],
-    queryFn: () => fetchMeme(),
+  const { data: featuredData, isLoading } = useQuery({
+    queryKey: ["admin-featured"],
+    queryFn: () => fetchFeatured(),
   });
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -540,30 +668,32 @@ function MemeTab() {
             base64: base64String,
             mimeType: file.type,
             fileName: file.name,
+            description: description.trim() || undefined,
           },
         });
-        qc.invalidateQueries({ queryKey: ["admin-meme"] });
-        qc.invalidateQueries({ queryKey: ["meme-of-day"] });
-        toast.success("Meme uploaded successfully");
+        qc.invalidateQueries({ queryKey: ["admin-featured"] });
+        qc.invalidateQueries({ queryKey: ["featured-of-day"] });
+        toast.success("Featured post uploaded successfully");
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
-      toast.error(err.message ?? "Failed to upload meme");
+      toast.error(err.message ?? "Failed to upload featured post");
     } finally {
       setUploading(false);
     }
   }
 
   async function handleRemove() {
-    if (!confirm("Remove the current meme?")) return;
+    if (!confirm("Remove the current featured post?")) return;
     setUploading(true);
     try {
       await doRemove();
-      qc.invalidateQueries({ queryKey: ["admin-meme"] });
-      qc.invalidateQueries({ queryKey: ["meme-of-day"] });
-      toast.success("Meme removed");
+      qc.invalidateQueries({ queryKey: ["admin-featured"] });
+      qc.invalidateQueries({ queryKey: ["featured-of-day"] });
+      setDescription("");
+      toast.success("Featured post removed");
     } catch {
-      toast.error("Failed to remove meme");
+      toast.error("Failed to remove featured post");
     } finally {
       setUploading(false);
     }
@@ -573,41 +703,58 @@ function MemeTab() {
     <div className="space-y-6 max-w-2xl">
       <div className="glass rounded-2xl p-6 space-y-6">
         <div>
-          <h2 className="text-lg font-semibold">Meme of the Day</h2>
+          <h2 className="text-lg font-semibold">Featured Post</h2>
           <p className="text-sm text-muted-foreground">
-            This image will be shown on the student dashboard homepage. Uploading a new one replaces the old one.
+            This image and optional explanation will be shown on the student dashboard homepage.
           </p>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-black/20 p-4 min-h-[250px] flex items-center justify-center">
+        <div className="rounded-xl border border-white/10 bg-black/20 p-4 min-h-[250px] flex flex-col items-center justify-center gap-4">
           {isLoading ? (
             <p className="text-muted-foreground animate-pulse">Loading...</p>
-          ) : memeUrl ? (
-            <div className="relative">
-              <img src={memeUrl} alt="Current meme" className="max-h-[400px] rounded-lg" />
+          ) : featuredData?.url ? (
+            <div className="flex flex-col items-center gap-4 w-full">
+              <img src={featuredData.url} alt="Current featured" className="max-h-[400px] rounded-lg" />
+              {featuredData.description && (
+                <div className="w-full bg-black/40 p-4 rounded-lg text-sm text-white/80 whitespace-pre-wrap text-left">
+                  {featuredData.description}
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col items-center text-muted-foreground gap-2">
               <Image className="h-8 w-8 opacity-50" />
-              <p>No meme uploaded currently</p>
+              <p>No featured post currently</p>
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-4">
-          <Button asChild disabled={uploading} className="gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground glow cursor-pointer">
-            <label>
-              <Plus className="h-4 w-4" />
-              {uploading ? "Uploading..." : "Upload New Image"}
-              <input type="file" accept="image/*" className="hidden" onChange={handleFile} disabled={uploading} />
-            </label>
-          </Button>
+        <div className="space-y-4">
+          <div className="grid gap-2">
+            <Label>Optional Explanation/Details</Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Add more details about this featured post..."
+              rows={3}
+            />
+          </div>
 
-          {memeUrl && (
-            <Button variant="outline" onClick={handleRemove} disabled={uploading} className="border-destructive/30 text-destructive hover:bg-destructive/10">
-              <Trash2 className="h-4 w-4 mr-2" /> Remove Image
+          <div className="flex items-center gap-4">
+            <Button asChild disabled={uploading} className="gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground glow cursor-pointer">
+              <label>
+                <Plus className="h-4 w-4" />
+                {uploading ? "Uploading..." : "Upload New Image"}
+                <input type="file" accept="image/*" className="hidden" onChange={handleFile} disabled={uploading} />
+              </label>
             </Button>
-          )}
+
+            {featuredData?.url && (
+              <Button variant="outline" onClick={handleRemove} disabled={uploading} className="border-destructive/30 text-destructive hover:bg-destructive/10">
+                <Trash2 className="h-4 w-4 mr-2" /> Remove Post
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -758,3 +905,4 @@ function AssignmentsTab() {
     </div>
   );
 }
+

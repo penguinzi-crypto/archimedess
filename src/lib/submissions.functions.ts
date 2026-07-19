@@ -8,6 +8,7 @@ export const submitQuiz = createServerFn({ method: "POST" })
         formId: z.string().uuid(),
         answers: z.record(z.string(), z.string()),
         durationSeconds: z.number().int().nonnegative().max(60 * 60 * 24),
+        cheatLogs: z.array(z.object({ time: z.string(), reason: z.string() })).default([]),
       })
       .parse(d),
   )
@@ -51,6 +52,7 @@ export const submitQuiz = createServerFn({ method: "POST" })
       score,
       total_questions: total,
       duration_seconds: data.durationSeconds,
+      cheat_logs: data.cheatLogs,
       submitted_at: new Date().toISOString(),
     });
     if (insertErr) throw new Error("Could not save submission");

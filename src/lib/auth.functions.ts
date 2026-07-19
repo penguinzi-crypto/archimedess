@@ -66,3 +66,16 @@ export const signOut = createServerFn({ method: "POST" }).handler(async () => {
   await session.clear();
   return { ok: true };
 });
+
+export const loginAsGuest = createServerFn({ method: "POST" }).handler(
+  async (): Promise<CurrentUser> => {
+    const { getAppSession } = await import("./session.server");
+    const session = await getAppSession();
+    await session.update({
+      userId: "guest",
+      role: "student",
+      name: "Guest",
+    });
+    return { id: "guest", name: "Guest", role: "student" };
+  },
+);

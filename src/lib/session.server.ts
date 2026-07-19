@@ -11,6 +11,16 @@ const SESSION_PASSWORD =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   "dev-only-fallback-not-for-production-min-32chars";
 
+if (!process.env.SESSION_SECRET) {
+  console.warn(
+    "[session] SESSION_SECRET not set — falling back to " +
+      (process.env.SUPABASE_SERVICE_ROLE_KEY
+        ? "SUPABASE_SERVICE_ROLE_KEY"
+        : "hardcoded dev secret") +
+      ". Set SESSION_SECRET in .env for production.",
+  );
+}
+
 export function getAppSession() {
   return useSession<SessionData>({
     password: SESSION_PASSWORD,
@@ -18,7 +28,7 @@ export function getAppSession() {
     maxAge: 60 * 60 * 24 * 7, // 7 days
     cookie: {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
       path: "/",
     },
