@@ -27,7 +27,7 @@ import {
 } from "@/lib/forms.functions";
 import { getDashboardStats } from "@/lib/submissions.functions";
 import {
-  listStudents, createStudent, toggleStudentDisabled, deleteStudent,
+  listStudents, createStudent, toggleStudentDisabled, deleteStudent, resetStudentPin,
   listAdmins, createAdmin, deleteAdmin, resetAdminPin,
 } from "@/lib/users.functions";
 import {
@@ -590,6 +590,10 @@ function StudentsTab() {
   const addStudentFn = useServerFn(createStudent);
   const toggleFn = useServerFn(toggleStudentDisabled);
   const deleteFn = useServerFn(deleteStudent);
+  const resetPinFn = useServerFn(resetStudentPin);
+
+  const [resetId, setResetId] = useState<string | null>(null);
+  const [resetPin, setResetPin] = useState("");
 
   const { data: students = [] } = useQuery({
     queryKey: ["admin-students"],
@@ -597,7 +601,7 @@ function StudentsTab() {
   });
 
   async function addStudent() {
-    if (!name.trim() || pin.trim().length < 4) { toast.error("Name + PIN (min 4 chars) required"); return; }
+    if (!name.trim() || pin.trim().length < 4) { toast.error("Name + Password (min 4 chars) required"); return; }
     try {
       await addStudentFn({ data: { name: name.trim(), pin: pin.trim() } });
       setName(""); setPin("");
@@ -623,7 +627,7 @@ function StudentsTab() {
     <div className="space-y-4">
       <div className="glass rounded-2xl p-4 flex flex-col gap-2 sm:flex-row sm:items-end">
         <div className="flex-1"><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Student name" className="bg-input/40 border-white/10" /></div>
-        <div className="flex-1"><Label>Login PIN</Label><Input value={pin} onChange={(e) => setPin(e.target.value)} placeholder="e.g. 12345678" className="bg-input/40 border-white/10 font-mono" /></div>
+        <div className="flex-1"><Label>Temporary Password</Label><Input value={pin} onChange={(e) => setPin(e.target.value)} placeholder="e.g. temp1234" className="bg-input/40 border-white/10 font-mono" /></div>
         <Button onClick={addStudent} className="gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground"><Plus className="h-4 w-4" /> Add</Button>
       </div>
 
@@ -633,6 +637,7 @@ function StudentsTab() {
             <tr>
               <th className="px-4 py-3 text-left">Name</th>
               <th className="px-4 py-3 text-left">Status</th>
+              <th className="px-4 py-3 text-left">Password Status</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -643,7 +648,19 @@ function StudentsTab() {
                 <td className="px-4 py-3">
                   {s.disabled ? <span className="text-destructive">Disabled</span> : <span className="text-success">Active</span>}
                 </td>
+                <td className="px-4 py-3">
+                  {s.pin_must_change ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-500">
+                      <AlertTriangle className="h-3 w-3" /> Temp Password
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Set</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-right">
+                  <Button variant="ghost" size="sm" onClick={() => { setResetId(s.id); setResetPin(""); }} className="gap-1">
+                    <RefreshCw className="h-4 w-4" /> Reset Password
+                  </Button>
                   <Button variant="ghost" size="sm" onClick={() => toggleDisabled(s)}>
                     {s.disabled ? <ToggleLeft className="h-4 w-4" /> : <ToggleRight className="h-4 w-4" />}
                   </Button>
@@ -651,11 +668,47 @@ function StudentsTab() {
                 </td>
               </tr>
             ))}
-            {students.length === 0 && <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">No students yet.</td></tr>}
+            {students.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No students yet.</td></tr>}
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-muted-foreground">PINs are hashed in the database and cannot be viewed after creation. Reset by deleting and re-adding the student.</p>
+      <p className="text-xs text-muted-foreground">Passwords are hashed in the database and cannot be viewed after creation.</p>
+
+      <Dialog open={!!resetId} onOpenChange={(o) => !o && setResetId(null)}>
+        <DialogContent className="glass-strong border-white/10 sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>Set a new temporary password. The student will be forced to change it on their next login.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <Label>New Temporary Password</Label>
+              <Input
+                value={resetPin}
+                onChange={(e) => setResetPin(e.target.value)}
+                placeholder="min 4 chars"
+                className="bg-input/40 border-white/10 font-mono"
+              />
+            </div>
+            <Button
+              className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground"
+              onClick={async () => {
+                if (resetPin.length < 4) { toast.error("Password must be at least 4 characters"); return; }
+                try {
+                  await resetPinFn({ data: { id: resetId!, newPin: resetPin } });
+                  qc.invalidateQueries({ queryKey: ["admin-students"] });
+                  toast.success("Password reset — student must change on next login");
+                  setResetId(null); setResetPin("");
+                } catch (err: any) {
+                  toast.error(err?.message ?? "Failed to reset password");
+                }
+              }}
+            >
+              Confirm Reset
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

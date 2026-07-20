@@ -7,7 +7,7 @@ export const listStudents = createServerFn({ method: "GET" }).handler(async () =
   await requireAdmin();
   const { data } = await supabaseAdmin
     .from("users")
-    .select("id, name, role, disabled, created_at")
+    .select("id, name, role, disabled, pin_must_change, created_at")
     .eq("role", "student")
     .order("created_at", { ascending: false });
   return data ?? [];
@@ -59,6 +59,29 @@ export const deleteStudent = createServerFn({ method: "POST" })
     await requireAdmin();
     await supabaseAdmin.from("submissions").delete().eq("student_id", data.id);
     await supabaseAdmin.from("users").delete().eq("id", data.id).eq("role", "student");
+    return { ok: true };
+  });
+
+export const resetStudentPin = createServerFn({ method: "POST" })
+  .validator((d) =>
+    z.object({
+      id: z.string().uuid(),
+      newPin: z.string().min(4).max(32),
+    }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import("./guards.server");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const bcrypt = (await import("bcryptjs")).default;
+    await requireAdmin();
+
+    const hash = await bcrypt.hash(data.newPin, 10);
+    const { error } = await supabaseAdmin
+      .from("users")
+      .update({ pin_hash: hash, pin_must_change: true })
+      .eq("id", data.id)
+      .eq("role", "student");
+    if (error) throw new Error("Could not reset password");
     return { ok: true };
   });
 

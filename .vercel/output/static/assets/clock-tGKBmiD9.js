@@ -1,0 +1,1 @@
+import{c as e}from"./button-BdKvc0nc.js";const t=e("ChevronLeft",[["path",{d:"m15 18-6-6 6-6",key:"1wnfg3"}]]);const c=e("ChevronRight",[["path",{d:"m9 18 6-6-6-6",key:"mthhwq"}]]);const n=e("Clock",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 16 14",key:"68esgv"}]]);export{n as C,c as a,t as b};
