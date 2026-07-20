@@ -96,7 +96,7 @@ export const createForm = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { requireAdmin } = await import("./guards.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await requireAdmin();
+    const admin = await requireAdmin();
 
     const { data: form, error } = await supabaseAdmin
       .from("forms")
@@ -110,6 +110,7 @@ export const createForm = createServerFn({ method: "POST" })
         access_pin: data.access_pin,
         start_mode: data.start_mode,
         status: data.start_mode === "synchronized" ? "draft" : "in_progress",
+        created_by: admin.id,
       })
       .select("id")
       .single();
@@ -151,13 +152,17 @@ export const getFormReview = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { requireAdmin } = await import("./guards.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await requireAdmin();
+    const admin = await requireAdmin();
 
     const { data: form } = await supabaseAdmin
       .from("forms")
-      .select("id, title")
+      .select("id, title, created_by")
       .eq("id", data.formId)
       .maybeSingle();
+
+    if (form?.created_by && form.created_by !== admin.id) {
+      throw new Error("You can only review forms you created");
+    }
 
     const { data: questions } = await supabaseAdmin
       .from("questions")

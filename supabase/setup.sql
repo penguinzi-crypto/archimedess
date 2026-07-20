@@ -32,6 +32,7 @@ CREATE TABLE public.forms (
   start_mode TEXT NOT NULL DEFAULT 'immediate' CHECK (start_mode IN ('immediate', 'synchronized')),
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'waiting', 'in_progress', 'completed')),
   is_published BOOLEAN NOT NULL DEFAULT true,
+  created_by UUID REFERENCES public.users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

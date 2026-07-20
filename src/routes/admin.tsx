@@ -7,7 +7,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   Plus, LogOut, Users as UsersIcon, FileText, BarChart3,
   Eye, Trash2, ToggleLeft, ToggleRight, Image, BookOpen, Dices,
-  Play, AlertTriangle,
+  Play, AlertTriangle, Lock,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -214,6 +214,7 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
 /* ============== FORMS ============== */
 function FormsTab() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [wizardOpen, setWizardOpen] = useState(false);
   const [reviewFormId, setReviewFormId] = useState<string | null>(null);
   const fetchForms = useServerFn(listAdminForms);
@@ -272,7 +273,11 @@ function FormsTab() {
                           toast.success("Exam Started!");
                        }} className="gap-1 text-primary"><Play className="h-4 w-4" /> Start Exam</Button>
                     )}
-                    <Button variant="ghost" size="sm" onClick={() => setReviewFormId(f.id)} className="gap-1"><Eye className="h-4 w-4" /> Review</Button>
+                    {(!f.created_by || f.created_by === user?.id) ? (
+                      <Button variant="ghost" size="sm" onClick={() => setReviewFormId(f.id)} className="gap-1"><Eye className="h-4 w-4" /> Review</Button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground px-2 py-1"><Lock className="h-3 w-3" /> Owner only</span>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => handleDelete(f.id)} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
                   </td>
                 </tr>

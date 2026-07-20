@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { loginWithPin, loginAsGuest } from "@/lib/auth.functions";
 import { toast } from "sonner";
-import { AnimatedBg } from "@/components/AnimatedBg";
 
 export const Route = createFileRoute("/")({
   component: Landing,
@@ -60,8 +59,6 @@ function Landing() {
 
   return (
     <main className="relative min-h-screen overflow-hidden flex items-center justify-center px-4">
-      <AnimatedBg />
-      
       <div className="absolute inset-0 z-0 flex items-center justify-center opacity-30 pointer-events-none">
         <div className="w-[800px] h-[800px] bg-primary/20 rounded-full blur-[120px] mix-blend-screen" />
         <div className="absolute w-[600px] h-[600px] bg-accent/20 rounded-full blur-[100px] mix-blend-screen translate-x-1/4 -translate-y-1/4" />
