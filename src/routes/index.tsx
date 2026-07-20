@@ -40,7 +40,7 @@ function Landing() {
       toast.success(`Welcome, ${me.name}`);
       navigate({ to: me.role === "admin" ? "/admin" : "/student" });
     } catch (err: any) {
-      toast.error(err?.message?.includes("disabled") ? "Account disabled" : "Invalid PIN");
+      toast.error(err?.message?.includes("disabled") ? "Account disabled" : "Invalid password");
     } finally {
       setLoading(false);
     }
@@ -206,7 +206,7 @@ function Landing() {
                     </div>
                     <div>
                       <p className="font-semibold">Sign in as Student</p>
-                      <p className="text-xs text-muted-foreground">Use your PIN to access quizzes</p>
+                      <p className="text-xs text-muted-foreground">Use your password to access quizzes</p>
                     </div>
                   </button>
 
@@ -247,8 +247,7 @@ function Landing() {
                       <Input
                         value={pin}
                         onChange={(e) => setPin(e.target.value)}
-                        placeholder="Enter your PIN"
-                        inputMode="numeric"
+                        placeholder="Enter your password"
                         type="password"
                         autoFocus
                         className="h-12 pl-10 text-center text-lg tracking-[0.4em] font-mono bg-input/40 border-white/10"
