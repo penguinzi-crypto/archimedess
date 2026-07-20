@@ -137,12 +137,12 @@ export const forceChangePin = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data }) => {
-    const { requireAdmin } = await import("./guards.server");
+    const { requireUser } = await import("./guards.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const bcrypt = (await import("bcryptjs")).default;
     const { getAppSession } = await import("./session.server");
 
-    const admin = await requireAdmin();
+    const user = await requireUser();
     const session = await getAppSession();
 
     // Only allowed if pin_must_change is true
@@ -154,7 +154,7 @@ export const forceChangePin = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin
       .from("users")
       .update({ pin_hash: newHash, pin_must_change: false })
-      .eq("id", admin.id);
+      .eq("id", user.id);
 
     if (error) throw new Error("Could not update PIN");
 

@@ -17,6 +17,7 @@ import { getFeatured } from "@/lib/featured.functions";
 import { listPublishedForms, getQuestionCount } from "@/lib/forms.functions";
 import { getAssignments, getStudentCompletions, markAssignmentDone } from "@/lib/assignments.functions";
 import { getMySubmissions, getLeaderboard } from "@/lib/submissions.functions";
+import { ForceChangePinModal } from "@/components/ForceChangePinModal";
 
 const serverGuardUser = createServerFn({ method: "GET" }).handler(async () => {
   const { redirectUnlessUser } = await import("@/lib/guards.server");
@@ -128,6 +129,11 @@ function SectionDashboard() {
   }
 
   if (!user) return null;
+
+  // Forced PIN change blocks all other actions
+  if (user.pinMustChange) {
+    return <ForceChangePinModal />;
+  }
 
   return (
     <main className="min-h-screen">

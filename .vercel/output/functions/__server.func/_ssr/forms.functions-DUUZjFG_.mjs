@@ -1,0 +1,307 @@
+import { c as createServerRpc } from "./createServerRpc-Q-WznjGe.mjs";
+import { c as createServerFn } from "./server-Bh35ipan.mjs";
+import "../_libs/seroval.mjs";
+import "../_libs/react.mjs";
+import { o as objectType, s as stringType, a as arrayType, e as enumType, b as booleanType, n as numberType } from "../_libs/zod.mjs";
+import "node:async_hooks";
+import "../_libs/h3-v2.mjs";
+import "../_libs/rou3.mjs";
+import "../_libs/srvx.mjs";
+import "node:stream";
+import "../_libs/tanstack__router-core.mjs";
+import "../_libs/tanstack__history.mjs";
+import "../_libs/cookie-es.mjs";
+import "../_libs/seroval-plugins.mjs";
+import "node:stream/web";
+import "../_libs/tanstack__react-router.mjs";
+import "../_libs/react-dom.mjs";
+import "../_libs/scheduler.mjs";
+import "stream";
+import "util";
+import "../_libs/isbot.mjs";
+const QuestionInput = objectType({
+  question_text: stringType().min(1),
+  question_type: enumType(["multiple_choice", "short_answer"]),
+  options: arrayType(stringType()).optional(),
+  correct_answer: stringType().min(1)
+});
+const listPublishedForms_createServerFn_handler = createServerRpc({
+  id: "9bf86eb5a59c955e5d6b181f4e049d966f5cd3c2e02d98ab937b0f9fbc7e4ae4",
+  name: "listPublishedForms",
+  filename: "src/lib/forms.functions.ts"
+}, (opts) => listPublishedForms.__executeServer(opts));
+const listPublishedForms = createServerFn({
+  method: "GET"
+}).handler(listPublishedForms_createServerFn_handler, async () => {
+  const {
+    requireStudent
+  } = await import("./guards.server-Bm5uQI0K.mjs");
+  const {
+    supabaseAdmin
+  } = await import("./client.server-C8UZwOtV.mjs");
+  await requireStudent();
+  const {
+    data
+  } = await supabaseAdmin.from("forms").select("id, title, description, type, has_timer, time_limit_minutes").eq("is_published", true).order("created_at", {
+    ascending: false
+  });
+  return data ?? [];
+});
+const listAdminForms_createServerFn_handler = createServerRpc({
+  id: "96360126a2b7e7131920d620f2e02b8349d25791e143d804f1650d567f9beebf",
+  name: "listAdminForms",
+  filename: "src/lib/forms.functions.ts"
+}, (opts) => listAdminForms.__executeServer(opts));
+const listAdminForms = createServerFn({
+  method: "GET"
+}).handler(listAdminForms_createServerFn_handler, async () => {
+  const {
+    requireAdmin
+  } = await import("./guards.server-Bm5uQI0K.mjs");
+  const {
+    supabaseAdmin
+  } = await import("./client.server-C8UZwOtV.mjs");
+  await requireAdmin();
+  const {
+    data
+  } = await supabaseAdmin.from("forms").select("*").order("created_at", {
+    ascending: false
+  });
+  return data ?? [];
+});
+const getFormForQuiz_createServerFn_handler = createServerRpc({
+  id: "49d69718854de24c8702a89cf3c0a9df4895d8070749c145bce03d713cc502e9",
+  name: "getFormForQuiz",
+  filename: "src/lib/forms.functions.ts"
+}, (opts) => getFormForQuiz.__executeServer(opts));
+const getFormForQuiz = createServerFn({
+  method: "POST"
+}).validator((d) => objectType({
+  formId: stringType().uuid(),
+  pin: stringType().optional()
+}).parse(d)).handler(getFormForQuiz_createServerFn_handler, async ({
+  data
+}) => {
+  const {
+    requireStudent
+  } = await import("./guards.server-Bm5uQI0K.mjs");
+  const {
+    supabaseAdmin
+  } = await import("./client.server-C8UZwOtV.mjs");
+  await requireStudent();
+  const {
+    data: form
+  } = await supabaseAdmin.from("forms").select("id, title, description, type, has_timer, time_limit_minutes, is_published, require_pin, access_pin, start_mode, status").eq("id", data.formId).maybeSingle();
+  if (!form || !form.is_published) throw new Error("Quiz unavailable");
+  if (form.require_pin && form.access_pin !== data.pin) {
+    return {
+      form: {
+        id: form.id,
+        title: form.title,
+        description: form.description,
+        require_pin: true,
+        start_mode: form.start_mode,
+        status: form.status
+      },
+      requirePin: true,
+      questions: []
+    };
+  }
+  const {
+    data: questions
+  } = await supabaseAdmin.from("questions").select("id, question_text, question_type, options_json, order_index").eq("form_id", data.formId).order("order_index");
+  return {
+    form,
+    requirePin: false,
+    questions: questions ?? []
+  };
+});
+const getQuestionCount_createServerFn_handler = createServerRpc({
+  id: "9d1b5c73dff9930f9ced8d1bf1b60af0c0af6a5031f4b7a992f442e705ccc03a",
+  name: "getQuestionCount",
+  filename: "src/lib/forms.functions.ts"
+}, (opts) => getQuestionCount.__executeServer(opts));
+const getQuestionCount = createServerFn({
+  method: "POST"
+}).validator((d) => objectType({
+  formId: stringType().uuid()
+}).parse(d)).handler(getQuestionCount_createServerFn_handler, async ({
+  data
+}) => {
+  const {
+    requireUser
+  } = await import("./guards.server-Bm5uQI0K.mjs");
+  const {
+    supabaseAdmin
+  } = await import("./client.server-C8UZwOtV.mjs");
+  await requireUser();
+  const {
+    count
+  } = await supabaseAdmin.from("questions").select("*", {
+    count: "exact",
+    head: true
+  }).eq("form_id", data.formId);
+  return count ?? 0;
+});
+const createForm_createServerFn_handler = createServerRpc({
+  id: "ec7ee786be50570d3408460666c9d14c8e9b6244bead39fdbbd2eff28b2cab22",
+  name: "createForm",
+  filename: "src/lib/forms.functions.ts"
+}, (opts) => createForm.__executeServer(opts));
+const createForm = createServerFn({
+  method: "POST"
+}).validator((d) => objectType({
+  title: stringType().min(1),
+  description: stringType().nullable(),
+  type: enumType(["quiz", "test"]),
+  has_timer: booleanType(),
+  time_limit_minutes: numberType().nullable(),
+  require_pin: booleanType().default(false),
+  access_pin: stringType().nullable().default(null),
+  start_mode: enumType(["immediate", "synchronized"]).default("immediate"),
+  questions: arrayType(QuestionInput).min(1)
+}).parse(d)).handler(createForm_createServerFn_handler, async ({
+  data
+}) => {
+  const {
+    requireAdmin
+  } = await import("./guards.server-Bm5uQI0K.mjs");
+  const {
+    supabaseAdmin
+  } = await import("./client.server-C8UZwOtV.mjs");
+  await requireAdmin();
+  const {
+    data: form,
+    error
+  } = await supabaseAdmin.from("forms").insert({
+    title: data.title,
+    description: data.description,
+    type: data.type,
+    has_timer: data.has_timer,
+    time_limit_minutes: data.time_limit_minutes,
+    require_pin: data.require_pin,
+    access_pin: data.access_pin,
+    start_mode: data.start_mode,
+    status: data.start_mode === "synchronized" ? "draft" : "in_progress"
+  }).select("id").single();
+  if (error || !form) throw new Error("Could not create form");
+  const rows = data.questions.map((q, i) => ({
+    form_id: form.id,
+    question_text: q.question_text,
+    question_type: q.question_type,
+    options_json: q.question_type === "multiple_choice" ? q.options : null,
+    correct_answer: q.correct_answer,
+    order_index: i
+  }));
+  const {
+    error: qErr
+  } = await supabaseAdmin.from("questions").insert(rows);
+  if (qErr) throw new Error("Could not save questions");
+  return {
+    id: form.id
+  };
+});
+const deleteForm_createServerFn_handler = createServerRpc({
+  id: "1c641ee571e61ae8a41d816b0c5322e45d9aecaab1aeba0eedca263dd0963fba",
+  name: "deleteForm",
+  filename: "src/lib/forms.functions.ts"
+}, (opts) => deleteForm.__executeServer(opts));
+const deleteForm = createServerFn({
+  method: "POST"
+}).validator((d) => objectType({
+  formId: stringType().uuid()
+}).parse(d)).handler(deleteForm_createServerFn_handler, async ({
+  data
+}) => {
+  const {
+    requireAdmin
+  } = await import("./guards.server-Bm5uQI0K.mjs");
+  const {
+    supabaseAdmin
+  } = await import("./client.server-C8UZwOtV.mjs");
+  await requireAdmin();
+  const {
+    error
+  } = await supabaseAdmin.from("forms").delete().eq("id", data.formId);
+  if (error) throw new Error("Could not delete form");
+  return {
+    ok: true
+  };
+});
+const getFormReview_createServerFn_handler = createServerRpc({
+  id: "9849aa4e5232a4914539e6de52acec9b752da4370b6a805710dda87e9dd76727",
+  name: "getFormReview",
+  filename: "src/lib/forms.functions.ts"
+}, (opts) => getFormReview.__executeServer(opts));
+const getFormReview = createServerFn({
+  method: "POST"
+}).validator((d) => objectType({
+  formId: stringType().uuid()
+}).parse(d)).handler(getFormReview_createServerFn_handler, async ({
+  data
+}) => {
+  const {
+    requireAdmin
+  } = await import("./guards.server-Bm5uQI0K.mjs");
+  const {
+    supabaseAdmin
+  } = await import("./client.server-C8UZwOtV.mjs");
+  await requireAdmin();
+  const {
+    data: form
+  } = await supabaseAdmin.from("forms").select("id, title").eq("id", data.formId).maybeSingle();
+  const {
+    data: questions
+  } = await supabaseAdmin.from("questions").select("id, question_text, question_type, options_json, correct_answer, order_index").eq("form_id", data.formId).order("order_index");
+  const {
+    data: subs
+  } = await supabaseAdmin.from("submissions").select("*").eq("form_id", data.formId);
+  const {
+    data: students
+  } = await supabaseAdmin.from("users").select("id, name").eq("role", "student").eq("disabled", false);
+  return {
+    form,
+    questions: questions ?? [],
+    subs: subs ?? [],
+    students: students ?? []
+  };
+});
+const startExam_createServerFn_handler = createServerRpc({
+  id: "e4876da13bfce2d4e105970e5379b23ebf9ca83684c9a105cd78f72d7079987f",
+  name: "startExam",
+  filename: "src/lib/forms.functions.ts"
+}, (opts) => startExam.__executeServer(opts));
+const startExam = createServerFn({
+  method: "POST"
+}).validator((d) => objectType({
+  formId: stringType().uuid()
+}).parse(d)).handler(startExam_createServerFn_handler, async ({
+  data
+}) => {
+  const {
+    requireAdmin
+  } = await import("./guards.server-Bm5uQI0K.mjs");
+  const {
+    supabaseAdmin
+  } = await import("./client.server-C8UZwOtV.mjs");
+  await requireAdmin();
+  const {
+    error
+  } = await supabaseAdmin.from("forms").update({
+    status: "in_progress"
+  }).eq("id", data.formId);
+  if (error) throw new Error("Could not start exam");
+  return {
+    success: true
+  };
+});
+export {
+  createForm_createServerFn_handler,
+  deleteForm_createServerFn_handler,
+  getFormForQuiz_createServerFn_handler,
+  getFormReview_createServerFn_handler,
+  getQuestionCount_createServerFn_handler,
+  listAdminForms_createServerFn_handler,
+  listPublishedForms_createServerFn_handler,
+  startExam_createServerFn_handler
+};

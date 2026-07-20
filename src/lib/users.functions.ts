@@ -33,6 +33,7 @@ export const createStudent = createServerFn({ method: "POST" })
       name: data.name,
       role: "student",
       pin_hash: hash,
+      pin_must_change: true,
     });
     if (error) throw new Error("Could not create student");
     return { ok: true };
