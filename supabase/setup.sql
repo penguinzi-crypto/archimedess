@@ -17,6 +17,8 @@ CREATE TABLE public.users (
   role TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('admin','student')),
   pin_hash TEXT NOT NULL,
   disabled BOOLEAN NOT NULL DEFAULT false,
+  is_super_admin BOOLEAN NOT NULL DEFAULT false,
+  pin_must_change BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -84,9 +86,10 @@ GRANT ALL ON public.submissions TO service_role;
 -- 4. SEED DATA
 -- Admin PIN: admin1234  (bcrypt hash below)
 -- Student PIN: student1234  (bcrypt hash below)
-INSERT INTO public.users (name, role, pin_hash) VALUES (
+INSERT INTO public.users (name, role, pin_hash, is_super_admin) VALUES (
   'Administrator', 'admin',
-  '$2b$10$djjkhuaZ9uowlTb6HxsWseCeypkY89J/2mKShyYNa1a2ox8AEkIx.'
+  '$2b$10$djjkhuaZ9uowlTb6HxsWseCeypkY89J/2mKShyYNa1a2ox8AEkIx.',
+  true
 );
 INSERT INTO public.users (name, role, pin_hash) VALUES (
   'Demo Student', 'student',

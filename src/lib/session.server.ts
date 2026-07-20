@@ -4,6 +4,8 @@ export type SessionData = {
   userId?: string;
   role?: "admin" | "student";
   name?: string;
+  isSuperAdmin?: boolean;
+  pinMustChange?: boolean;
 };
 
 const SESSION_PASSWORD =

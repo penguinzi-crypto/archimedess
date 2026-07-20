@@ -75,3 +75,21 @@ export async function requireStudent() {
   if (u.role !== "student") throw new Error("Student only");
   return u;
 }
+
+export async function requireSuperAdmin() {
+  const session = await getAppSession();
+  if (!session.data.userId || !session.data.role) {
+    throw new Error("Not signed in");
+  }
+  if (session.data.role !== "admin") {
+    throw new Error("Admin only");
+  }
+  if (!session.data.isSuperAdmin) {
+    throw new Error("Super admin only");
+  }
+  return {
+    id: session.data.userId,
+    role: session.data.role as "admin",
+    name: session.data.name ?? "",
+  };
+}

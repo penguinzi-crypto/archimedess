@@ -7,7 +7,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   Plus, LogOut, Users as UsersIcon, FileText, BarChart3,
   Eye, Trash2, ToggleLeft, ToggleRight, Image, BookOpen, Dices,
-  Play, AlertTriangle, Lock,
+  Play, AlertTriangle, Lock, Shield, KeyRound, RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -28,11 +28,13 @@ import {
 import { getDashboardStats } from "@/lib/submissions.functions";
 import {
   listStudents, createStudent, toggleStudentDisabled, deleteStudent,
+  listAdmins, createAdmin, deleteAdmin, resetAdminPin,
 } from "@/lib/users.functions";
 import {
   uploadFeatured, removeFeatured, getFeatured,
 } from "@/lib/featured.functions";
 import { getAssignments, createAssignment, deleteAssignment } from "@/lib/assignments.functions";
+import { changeMyPin, forceChangePin } from "@/lib/auth.functions";
 
 const serverGuardAdmin = createServerFn({ method: "GET" }).handler(async () => {
   const { redirectUnlessAdmin } = await import("@/lib/guards.server");
@@ -50,10 +52,14 @@ export const Route = createFileRoute("/admin")({
 function AdminPanel() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [changePinOpen, setChangePinOpen] = useState(false);
 
-  // Server-side beforeLoad already enforces admin access.
-  // This is a graceful client fallback only (belt-and-suspenders).
   if (!user) return null;
+
+  // Forced PIN change blocks all other actions
+  if (user.pinMustChange) {
+    return <ForceChangePinModal />;
+  }
 
   return (
     <main className="min-h-screen px-4 py-8 sm:px-8">
@@ -62,9 +68,14 @@ function AdminPanel() {
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Command Center</p>
           <h1 className="text-2xl font-bold sm:text-3xl text-gradient">Admin Console</h1>
         </div>
-        <Button variant="ghost" onClick={async () => { await logout(); navigate({ to: "/" }); }} className="gap-2">
-          <LogOut className="h-4 w-4" /> Sign out
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" onClick={() => setChangePinOpen(true)} className="gap-2">
+            <KeyRound className="h-4 w-4" /> Change PIN
+          </Button>
+          <Button variant="ghost" onClick={async () => { await logout(); navigate({ to: "/" }); }} className="gap-2">
+            <LogOut className="h-4 w-4" /> Sign out
+          </Button>
+        </div>
       </header>
 
       <div className="mx-auto mt-8 max-w-6xl">
@@ -75,6 +86,9 @@ function AdminPanel() {
             <TabsTrigger value="students" className="gap-2"><UsersIcon className="h-4 w-4" /> Students</TabsTrigger>
             <TabsTrigger value="assignments" className="gap-2"><BookOpen className="h-4 w-4" /> Assignments</TabsTrigger>
             <TabsTrigger value="featured" className="gap-2"><Image className="h-4 w-4" /> Featured</TabsTrigger>
+            {user.isSuperAdmin && (
+              <TabsTrigger value="admins" className="gap-2"><Shield className="h-4 w-4" /> Admins</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6"><DashboardTab /></TabsContent>
@@ -82,8 +96,13 @@ function AdminPanel() {
           <TabsContent value="students" className="mt-6"><StudentsTab /></TabsContent>
           <TabsContent value="assignments" className="mt-6"><AssignmentsTab /></TabsContent>
           <TabsContent value="featured" className="mt-6"><FeaturedTab /></TabsContent>
+          {user.isSuperAdmin && (
+            <TabsContent value="admins" className="mt-6"><AdminsTab /></TabsContent>
+          )}
         </Tabs>
       </div>
+
+      <ChangePinDialog open={changePinOpen} onClose={() => setChangePinOpen(false)} />
     </main>
   );
 }
@@ -907,6 +926,260 @@ function AssignmentsTab() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ============== FORCE CHANGE PIN MODAL ============== */
+function ForceChangePinModal() {
+  const { user, setUser } = useAuth();
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [loading, setLoading] = useState(false);
+  const doForceChange = useServerFn(forceChangePin);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPin.length < 4) { toast.error("PIN must be at least 4 characters"); return; }
+    if (newPin !== confirmPin) { toast.error("PINs don't match"); return; }
+    setLoading(true);
+    try {
+      await doForceChange({ data: { newPin } });
+      if (user) setUser({ ...user, pinMustChange: false });
+      toast.success("PIN updated successfully!");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Could not change PIN");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="glass-strong rounded-3xl p-8 max-w-md w-full border-2 border-primary/20 shadow-[0_0_60px_-15px_rgba(120,119,198,0.3)] relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10 pointer-events-none" />
+        <div className="relative z-10">
+          <div className="text-center mb-6">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center mb-4 glow">
+              <Shield className="h-7 w-7 text-primary-foreground" />
+            </div>
+            <h2 className="text-2xl font-bold">Set Your New PIN</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              Your account has a temporary PIN. You must set a new one before continuing.
+            </p>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label>New PIN</Label>
+              <Input
+                type="password"
+                value={newPin}
+                onChange={(e) => setNewPin(e.target.value)}
+                placeholder="Enter new PIN (min 4 chars)"
+                inputMode="numeric"
+                className="h-12 bg-input/40 border-white/10 font-mono text-center tracking-[0.3em] text-lg"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label>Confirm New PIN</Label>
+              <Input
+                type="password"
+                value={confirmPin}
+                onChange={(e) => setConfirmPin(e.target.value)}
+                placeholder="Re-enter new PIN"
+                inputMode="numeric"
+                className="h-12 bg-input/40 border-white/10 font-mono text-center tracking-[0.3em] text-lg"
+              />
+            </div>
+            <Button type="submit" disabled={loading} className="w-full h-12 text-base font-semibold bg-gradient-to-r from-primary to-accent text-primary-foreground glow">
+              {loading ? "Updating..." : "Set New PIN"}
+            </Button>
+          </form>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/* ============== CHANGE PIN DIALOG ============== */
+function ChangePinDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [currentPin, setCurrentPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [loading, setLoading] = useState(false);
+  const doChangePin = useServerFn(changeMyPin);
+
+  function reset() { setCurrentPin(""); setNewPin(""); setConfirmPin(""); }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPin.length < 4) { toast.error("PIN must be at least 4 characters"); return; }
+    if (newPin !== confirmPin) { toast.error("PINs don't match"); return; }
+    setLoading(true);
+    try {
+      await doChangePin({ data: { currentPin, newPin } });
+      toast.success("PIN changed successfully!");
+      reset();
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Could not change PIN");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { reset(); onClose(); } }}>
+      <DialogContent className="glass-strong border-white/10 sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Change My PIN</DialogTitle>
+          <DialogDescription>Enter your current PIN and choose a new one.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label>Current PIN</Label>
+            <Input type="password" value={currentPin} onChange={(e) => setCurrentPin(e.target.value)} placeholder="Your current PIN" className="bg-input/40 border-white/10 font-mono" autoFocus />
+          </div>
+          <div>
+            <Label>New PIN</Label>
+            <Input type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} placeholder="New PIN (min 4 chars)" className="bg-input/40 border-white/10 font-mono" />
+          </div>
+          <div>
+            <Label>Confirm New PIN</Label>
+            <Input type="password" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value)} placeholder="Re-enter new PIN" className="bg-input/40 border-white/10 font-mono" />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => { reset(); onClose(); }}>Cancel</Button>
+            <Button type="submit" disabled={loading} className="bg-gradient-to-r from-primary to-accent text-primary-foreground">
+              {loading ? "Changing..." : "Change PIN"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ============== ADMINS TAB (Super Admin Only) ============== */
+function AdminsTab() {
+  const qc = useQueryClient();
+  const [name, setName] = useState("");
+  const [pin, setPin] = useState("");
+  const [resetId, setResetId] = useState<string | null>(null);
+  const [resetPin, setResetPin] = useState("");
+
+  const fetchAdmins = useServerFn(listAdmins);
+  const addAdminFn = useServerFn(createAdmin);
+  const deleteFn = useServerFn(deleteAdmin);
+  const resetFn = useServerFn(resetAdminPin);
+
+  const { data: admins = [] } = useQuery({
+    queryKey: ["admin-admins"],
+    queryFn: () => fetchAdmins(),
+  });
+
+  async function addAdmin() {
+    if (!name.trim() || pin.trim().length < 4) { toast.error("Name + Temp PIN (min 4 chars) required"); return; }
+    try {
+      await addAdminFn({ data: { name: name.trim(), pin: pin.trim() } });
+      setName(""); setPin("");
+      qc.invalidateQueries({ queryKey: ["admin-admins"] });
+      toast.success("Admin created with temporary PIN");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to create admin");
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this admin?")) return;
+    try {
+      await deleteFn({ data: { id } });
+      qc.invalidateQueries({ queryKey: ["admin-admins"] });
+      toast.success("Admin deleted");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to delete");
+    }
+  }
+
+  async function handleReset() {
+    if (!resetId || resetPin.length < 4) { toast.error("PIN must be at least 4 characters"); return; }
+    try {
+      await resetFn({ data: { id: resetId, newPin: resetPin } });
+      qc.invalidateQueries({ queryKey: ["admin-admins"] });
+      toast.success("PIN reset \u2014 admin must change on next login");
+      setResetId(null); setResetPin("");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to reset PIN");
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="glass rounded-2xl p-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="flex-1"><Label>Admin Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="New admin name" className="bg-input/40 border-white/10" /></div>
+        <div className="flex-1"><Label>Temporary PIN</Label><Input value={pin} onChange={(e) => setPin(e.target.value)} placeholder="e.g. temp1234" className="bg-input/40 border-white/10 font-mono" /></div>
+        <Button onClick={addAdmin} className="gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground"><Plus className="h-4 w-4" /> Add Admin</Button>
+      </div>
+
+      <div className="glass rounded-2xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-white/5 text-xs uppercase tracking-widest text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3 text-left">Name</th>
+              <th className="px-4 py-3 text-left">Status</th>
+              <th className="px-4 py-3 text-left">PIN Status</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {admins.map((a: any) => (
+              <tr key={a.id} className="border-t border-white/5">
+                <td className="px-4 py-3 font-medium">{a.name}</td>
+                <td className="px-4 py-3">
+                  {a.disabled ? <span className="text-destructive">Disabled</span> : <span className="text-success">Active</span>}
+                </td>
+                <td className="px-4 py-3">
+                  {a.pin_must_change ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-500">
+                      <AlertTriangle className="h-3 w-3" /> Temp PIN
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Set</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <Button variant="ghost" size="sm" onClick={() => { setResetId(a.id); setResetPin(""); }} className="gap-1">
+                    <RefreshCw className="h-4 w-4" /> Reset PIN
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(a.id)} className="text-destructive">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+            {admins.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No other admins yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-xs text-muted-foreground">Admins with \u201cTemp PIN\u201d must change their PIN on next login. PINs are hashed and cannot be viewed after creation.</p>
+
+      <Dialog open={!!resetId} onOpenChange={(o) => !o && setResetId(null)}>
+        <DialogContent className="glass-strong border-white/10 sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reset Admin PIN</DialogTitle>
+            <DialogDescription>Set a new temporary PIN. The admin will be forced to change it on their next login.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div><Label>New Temporary PIN</Label><Input type="text" value={resetPin} onChange={(e) => setResetPin(e.target.value)} placeholder="e.g. temp1234" className="bg-input/40 border-white/10 font-mono" autoFocus /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setResetId(null)}>Cancel</Button>
+            <Button onClick={handleReset} className="bg-gradient-to-r from-primary to-accent text-primary-foreground">Reset PIN</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
